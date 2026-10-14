@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agenda 2027 — Compagnon numérique</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+  :root{
+    --paper:#EAE6D9; --paper-line:#A9C0D8; --margin-red:#C0402C;
+    --ink:#1D2B4F; --ink-soft:#3C4A6B; --cream:#F6F3E9;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:'Fraunces',serif;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:640px;margin:0 auto;padding:36px 20px 70px;}
+  .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--margin-red);margin-bottom:10px;}
+  h1{font-size:clamp(26px,6vw,36px);line-height:1.1;margin:0 0 14px;font-weight:600;}
+  .sub{font-size:15.5px;color:var(--ink-soft);line-height:1.55;margin-bottom:30px;}
+  .tabs{display:flex;gap:2px;margin-bottom:16px;}
+  .tab{font-family:'IBM Plex Mono',monospace;font-size:12.5px;padding:10px 16px;background:transparent;border:1.5px solid var(--ink);color:var(--ink);cursor:pointer;}
+  .tab.active{background:var(--ink);color:var(--cream);}
+  .panel{border:1.5px solid var(--ink);background:var(--cream);padding:22px;}
+  .panel-inner{display:none;} .panel-inner.active{display:block;}
+  .drop{border:1.5px dashed var(--ink-soft);padding:26px;text-align:center;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--ink-soft);margin-bottom:14px;}
+  .drop.has-file{border-style:solid;color:var(--ink);}
+  #fileInput{display:none;}
+  #preview{max-width:100%;max-height:220px;display:none;margin:0 auto 14px;border:1px solid var(--ink);}
+  textarea{width:100%;min-height:110px;font-family:'IBM Plex Mono',monospace;font-size:13.5px;padding:14px;border:1.5px solid var(--ink-soft);background:#fff;color:var(--ink);margin-bottom:14px;}
+  .row{display:flex;gap:10px;flex-wrap:wrap;}
+  button.btn{font-family:'IBM Plex Mono',monospace;font-size:12.5px;padding:11px 18px;background:var(--ink);color:var(--cream);border:1.5px solid var(--ink);cursor:pointer;}
+  button.btn:hover{background:var(--margin-red);border-color:var(--margin-red);}
+  button.btn:disabled{opacity:.45;cursor:not-allowed;}
+  button.btn.ghost{background:transparent;color:var(--ink);}
+  .status{font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--ink-soft);margin-top:14px;min-height:18px;}
+  .status.err{color:var(--margin-red);}
+  .results{margin-top:20px;} .results{display:none;}
+  .result-item{display:flex;justify-content:space-between;gap:14px;padding:11px 0;border-bottom:1px solid rgba(29,43,79,.18);}
+  .result-item .meta b{display:block;font-size:15px;} .result-item .meta span{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--ink-soft);}
+  .result-item .when{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--margin-red);white-space:nowrap;}
+  .download-bar{margin-top:20px;padding-top:16px;border-top:2px solid var(--ink);display:none;align-items:center;gap:12px;flex-wrap:wrap;}
+  footer{padding:26px 0 0;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-soft);text-align:center;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">Agenda 2027 — Bonus</div>
+  <h1>Vos rendez-vous, sur votre téléphone.</h1>
+  <p class="sub">Prenez en photo la page de votre agenda, ou collez le texte de vos notes. Le fichier calendrier se génère automatiquement.</p>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="photo">Photo d'une page</button>
+    <button class="tab" data-tab="texte">Coller un texte</button>
+  </div>
+
+  <div class="panel">
+    <div class="panel-inner active" id="panel-photo">
+      <div class="drop" id="dropZone">Cliquez pour choisir une photo</div>
+      <input type="file" id="fileInput" accept="image/*" capture="environment">
+      <img id="preview">
+      <div class="row">
+        <button class="btn" id="extractPhotoBtn" disabled>Extraire les rendez-vous</button>
+        <button class="btn ghost" id="clearPhotoBtn">Effacer</button>
+      </div>
+    </div>
+    <div class="panel-inner" id="panel-texte">
+      <textarea id="textInput" placeholder="Ex : Lundi 14h30 RDV Maître Dubois avocat, cabinet 12 rue de Rivoli"></textarea>
+      <div class="row"><button class="btn" id="extractTextBtn">Extraire les rendez-vous</button></div>
+    </div>
+    <div class="status" id="status"></div>
+    <div class="results" id="results"></div>
+    <div class="download-bar" id="downloadBar">
+      <button class="btn" id="downloadBtn">Télécharger le fichier calendrier (.ics)</button>
+    </div>
+  </div>
+  <footer>Agenda 2027 — compagnon numérique</footer>
+</div>
+
+<script>
+(function(){
+  const tabs = document.querySelectorAll('.tab');
+  const panels = { photo: document.getElementById('panel-photo'), texte: document.getElementById('panel-texte') };
+  tabs.forEach(t => t.addEventListener('click', () => {
+    tabs.forEach(x=>x.classList.remove('active')); t.classList.add('active');
+    Object.values(panels).forEach(p=>p.classList.remove('active'));
+    panels[t.dataset.tab].classList.add('active');
+  }));
+
+  const dropZone = document.getElementById('dropZone');
+  const fileInput = document.getElementById('fileInput');
+  const preview = document.getElementById('preview');
+  const extractPhotoBtn = document.getElementById('extractPhotoBtn');
+  let base64Image = null, imageMediaType = null;
+
+  dropZone.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files[0]; if(!file) return;
+    imageMediaType = file.type;
+    const reader = new FileReader();
+    reader.onload = () => {
+      base64Image = reader.result.split(',')[1];
+      preview.src = reader.result; preview.style.display='block';
+      dropZone.textContent = file.name; dropZone.classList.add('has-file');
+      extractPhotoBtn.disabled = false;
+    };
+    reader.readAsDataURL(file);
+  });
+  document.getElementById('clearPhotoBtn').addEventListener('click', () => {
+    base64Image=null; preview.style.display='none'; preview.src='';
+    dropZone.textContent="Cliquez pour choisir une photo"; dropZone.classList.remove('has-file');
+    extractPhotoBtn.disabled=true; fileInput.value='';
+  });
+
+  const statusEl = document.getElementById('status');
+  const resultsEl = document.getElementById('results');
+  const downloadBar = document.getElementById('downloadBar');
+  let currentEvents = [];
+
+  function setStatus(msg, isErr){ statusEl.textContent=msg; statusEl.className='status'+(isErr?' err':''); }
+  function hideResults(){ resultsEl.style.display='none'; resultsEl.innerHTML=''; downloadBar.style.display='none'; }
+  function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  function renderResults(events){
+    currentEvents = events;
+    if(!events || events.length===0){ setStatus("Aucun rendez-vous détecté.", true); hideResults(); return; }
+    resultsEl.innerHTML = events.map(ev => `
+      <div class="result-item">
+        <div class="meta"><b>${escapeHtml(ev.title||'Sans titre')}</b><span>${escapeHtml(ev.location||'')}</span></div>
+        <div class="when">${ev.date||''}${ev.time ? ' · '+ev.time : ''}</div>
+      </div>`).join('');
+    resultsEl.style.display='block'; downloadBar.style.display='flex';
+    setStatus(events.length + " rendez-vous détecté(s).");
+  }
+
+  async function callBackend(payload){
+    const r = await fetch('/api/extract', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)
+    });
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error || 'Erreur');
+    return data.events;
+  }
+
+  document.getElementById('extractPhotoBtn').addEventListener('click', async () => {
+    if(!base64Image) return;
+    setStatus("Lecture de la photo…"); hideResults();
+    try{ renderResults(await callBackend({ image: base64Image, imageMediaType })); }
+    catch(e){ setStatus("Erreur : "+e.message, true); }
+  });
+  document.getElementById('extractTextBtn').addEventListener('click', async () => {
+    const txt = document.getElementById('textInput').value.trim();
+    if(!txt){ setStatus("Écrivez un texte d'abord.", true); return; }
+    setStatus("Lecture du texte…"); hideResults();
+    try{ renderResults(await callBackend({ text: txt })); }
+    catch(e){ setStatus("Erreur : "+e.message, true); }
+  });
+
+  function pad(n){ return String(n).padStart(2,'0'); }
+  function toICSDate(dateStr, timeStr){
+    const [y,m,d] = dateStr.split('-').map(Number);
+    if(timeStr){ const [h,min]=timeStr.split(':').map(Number); return `${y}${pad(m)}${pad(d)}T${pad(h)}${pad(min)}00`; }
+    return `${y}${pad(m)}${pad(d)}`;
+  }
+  function buildICS(events){
+    let out = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Agenda2027//FR\r\n";
+    events.forEach((ev,i)=>{
+      const dt = toICSDate(ev.date, ev.time);
+      out += "BEGIN:VEVENT\r\nUID:"+Date.now()+"-"+i+"@agenda2027\r\n";
+      out += ev.time ? "DTSTART:"+dt+"\r\n" : "DTSTART;VALUE=DATE:"+dt+"\r\n";
+      out += "SUMMARY:"+(ev.title||'Rendez-vous').replace(/\r?\n/g,' ')+"\r\n";
+      if(ev.location) out += "LOCATION:"+ev.location.replace(/\r?\n/g,' ')+"\r\n";
+      out += "END:VEVENT\r\n";
+    });
+    out += "END:VCALENDAR\r\n"; return out;
+  }
+  document.getElementById('downloadBtn').addEventListener('click', () => {
+    if(currentEvents.length===0) return;
+    const blob = new Blob([buildICS(currentEvents)], {type:'text/calendar'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href=url; a.download='rendez-vous-agenda-2027.ics';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+})();
+</script>
+</body>
+</html>
